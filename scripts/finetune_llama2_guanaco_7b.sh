@@ -1,12 +1,12 @@
 python qlora.py \
-    --model_name_or_path meta-llama/Llama-2-7b-hf \
+    --model_name_or_path /mnt/data/zoo/llama2/llama2-7b-hf/ \
     --use_auth \
-    --output_dir ./output/llama-2-guanaco-7b \
+    --output_dir /mnt/data/sonia/ckpts/llama-2-7b-nov11-2 \
     --logging_steps 10 \
     --save_strategy steps \
     --data_seed 42 \
-    --save_steps 500 \
-    --save_total_limit 40 \
+    --save_steps 10 \
+    --save_total_limit 4000 \
     --evaluation_strategy steps \
     --eval_dataset_size 1024 \
     --max_eval_samples 1000 \
@@ -25,17 +25,17 @@ python qlora.py \
     --double_quant \
     --quant_type nf4 \
     --bf16 \
-    --bits 4 \
+    --bits 8 \
     --warmup_ratio 0.03 \
     --lr_scheduler_type constant \
     --gradient_checkpointing \
-    --dataset oasst1 \
+    --dataset /mnt/data/sonia/honeygan/llama_format_jul25.dat \
     --source_max_len 16 \
     --target_max_len 512 \
     --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 16 \
-    --max_steps 1875 \
-    --eval_steps 187 \
+    --max_steps 500 \
+    --eval_steps 5 \
     --learning_rate 0.0002 \
     --adam_beta2 0.999 \
     --max_grad_norm 0.3 \
