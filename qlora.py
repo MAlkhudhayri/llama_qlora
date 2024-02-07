@@ -127,6 +127,10 @@ class TrainingArguments(transformers.Seq2SeqTrainingArguments):
         default=2048,
         metadata={"help": "Maximum source sequence length for mmlu."}
     )
+    eval_samples: bool = field(
+        default=False,
+        metadata={"help": "Whether to produce text samples at each eval."}
+    )
     full_finetune: bool = field(
         default=False,
         metadata={"help": "Finetune the entire model without adapters."}
@@ -294,6 +298,7 @@ def get_accelerate_model(args, checkpoint_dir):
             bnb_4bit_quant_type=args.quant_type,
         ),
         torch_dtype=(torch.float32 if args.fp16 else (torch.bfloat16 if args.bf16 else torch.float32)),
+        pretraining_tp=1,
         trust_remote_code=args.trust_remote_code,
         use_auth_token=args.use_auth_token
     )
@@ -688,6 +693,42 @@ def train():
     # Callbacks
     if not args.full_finetune:
         trainer.add_callback(SavePeftModelCallback)
+    if args.eval_samples:
+        class evalSampleCallback(transformers.TrainerCallback):
+            def on_evaluate(self, args, state, control, model, **kwargs):
+                trainer.model.eval()
+                # batch = next(iter(trainer.get_train_dataloader()))
+                # print(batch['input_ids'].shape) #labels
+                toks = trainer.tokenizer(['4235', '5462', '7132', '6460'], 
+                        return_tensors="pt").input_ids #batch['input_ids']
+                
+                modelmu = model.merge_and_unload() #LlamaForCausalLM
+                
+                class nonBuggyNorm(torch.nn.Module): #replaces LlamaRMSNorm which has dtype issues
+                    def __init__(self, hidden_size, eps=1e-6):
+                        super().__init__()
+                        self.weight = torch.nn.Parameter(torch.ones(hidden_size))
+                        self.variance_epsilon = eps
+                        
+                    def forward(self, hidden_states):
+                        input_dtype = hidden_states.dtype
+                        hidden_states = hidden_states.to(torch.float32)
+                        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+                        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+                        result = self.weight.to(hidden_states.get_device()) * hidden_states.to(input_dtype) # changed from LLamaRMSNorm
+                        return result.to(torch.bfloat16) # added from LLamaRMSNorm
+                    
+                    
+                modelmu.model.norm = nonBuggyNorm(modelmu.config.hidden_size, eps=modelmu.config.rms_norm_eps)
+                
+                outputs = modelmu.generate(input_ids=toks.cuda(), max_new_tokens=100)
+                predictions= trainer.tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+                
+                with open(os.path.join(args.output_dir, 'samples.txt'), 'w+') as f:
+                    print('samples logged to ', os.path.join(args.output_dir, 'samples.txt'))
+                    f.writelines(predictions)
+                
+        trainer.add_callback(evalSampleCallback)
     if args.do_mmlu_eval:
         if args.mmlu_dataset == 'mmlu-zs':
             mmlu_dataset = load_dataset("json", data_files={
