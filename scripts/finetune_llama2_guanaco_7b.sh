@@ -40,5 +40,5 @@ python qlora.py \
     --max_grad_norm 0.3 \
     --lora_dropout 0.1 \
     --output_dir /mnt/data/sonia/ckpts/debug \
-    --learning_rate 0.02 \
+    --learning_rate 0.0002 \
     --weight_decay 0 \
