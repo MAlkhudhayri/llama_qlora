@@ -14,6 +14,9 @@ from tqdm import tqdm
 import logging
 import bitsandbytes as bnb
 import pandas as pd
+import importlib
+from packaging import version
+from packaging.version import parse
 
 import torch
 import transformers
@@ -41,40 +44,36 @@ from peft.tuners.lora import LoraLayer
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
 
 
-torch.backends.cuda.matmul.allow_tf32 = True
+def is_ipex_available():
+    def get_major_and_minor_from_version(full_version):
+        return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
+
+    _torch_version = importlib.metadata.version("torch")
+    if importlib.util.find_spec("intel_extension_for_pytorch") is None:
+        return False
+    _ipex_version = "N/A"
+    try:
+        _ipex_version = importlib.metadata.version("intel_extension_for_pytorch")
+    except importlib.metadata.PackageNotFoundError:
+        return False
+    torch_major_and_minor = get_major_and_minor_from_version(_torch_version)
+    ipex_major_and_minor = get_major_and_minor_from_version(_ipex_version)
+    if torch_major_and_minor != ipex_major_and_minor:
+        warnings.warn(
+            f"Intel Extension for PyTorch {ipex_major_and_minor} needs to work with PyTorch {ipex_major_and_minor}.*,"
+            f" but PyTorch {_torch_version} is found. Please switch to the matching version and run again."
+        )
+        return False
+    return True
+    
+
+if torch.cuda.is_available():   
+    torch.backends.cuda.matmul.allow_tf32 = True
 
 logger = logging.getLogger(__name__)
 
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 @dataclass
 class ModelArguments:
@@ -293,7 +292,11 @@ class SavePeftModelCallback(transformers.TrainerCallback):
 
 def get_accelerate_model(args, checkpoint_dir):
 
-    n_gpus = torch.cuda.device_count()
+    if torch.cuda.is_available():
+        n_gpus = torch.cuda.device_count()
+    if is_ipex_available() and torch.xpu.is_available():
+        n_gpus = torch.xpu.device_count()
+        
     max_memory = f'{args.max_memory_MB}MB'
     max_memory = {i: max_memory for i in range(n_gpus)}
     device_map = "auto"
@@ -326,16 +329,18 @@ def get_accelerate_model(args, checkpoint_dir):
             bnb_4bit_quant_type=args.quant_type,
         ),
         torch_dtype=(torch.float32 if args.fp16 else (torch.bfloat16 if args.bf16 else torch.float32)),
-        pretraining_tp=1,
         trust_remote_code=args.trust_remote_code,
         use_auth_token=args.use_auth_token
     )
     if compute_dtype == torch.float16 and args.bits == 4:
-        major, minor = torch.cuda.get_device_capability()
-        if major >= 8:
+        if torch.cuda.is_bf16_supported():
             print('='*80)
             print('Your GPU supports bfloat16, you can accelerate training with the argument --bf16')
             print('='*80)
+            
+    if compute_dtype == torch.float16 and (is_ipex_available() and torch.xpu.is_available()):
+        compute_dtype = torch.bfloat16
+        print('Intel XPU does not support float16 yet, so switching to bfloat16')
 
     setattr(model, 'model_parallel', True)
     setattr(model, 'is_parallelizable', True)
@@ -349,6 +354,7 @@ def get_accelerate_model(args, checkpoint_dir):
         padding_side="right",
         use_fast=False, # Fast tokenizer giving issues.
         tokenizer_type='llama' if 'llama' in args.model_name_or_path else None, # Needed for HF name change
+        trust_remote_code=args.trust_remote_code,
         use_auth_token=args.use_auth_token,
     )
     if tokenizer._pad_token is None:
@@ -533,10 +539,8 @@ def extract_alpaca_dataset(example):
     return {'input': prompt_format.format(**example)}
 
 def local_dataset(dataset_name):
-    if dataset_name.endswith('.json'):
+    if dataset_name.endswith('.json') or dataset_name.endswith('.jsonl'):
         full_dataset = Dataset.from_json(path_or_paths=dataset_name)
-    elif dataset_name.endswith('.jsonl'):
-        full_dataset = Dataset.from_json(filename=dataset_name, format='jsonlines')
     elif dataset_name.endswith('.csv'):
         full_dataset = Dataset.from_pandas(pd.read_csv(dataset_name))
     elif dataset_name.endswith('.tsv'):
@@ -642,16 +646,18 @@ def make_data_module(tokenizer: transformers.PreTrainedTokenizer, args) -> Dict:
     if args.do_eval or args.do_predict:
         if 'eval' in dataset:
             eval_dataset = dataset['eval']
-        else:
+        elif args.eval_dataset_size > 0:
             print('Splitting train dataset in train and validation according to `eval_dataset_size`')
             dataset = dataset["train"].train_test_split(
                 test_size=args.eval_dataset_size, shuffle=True, seed=42
             )
             eval_dataset = dataset['test']
-        if args.max_eval_samples is not None and len(eval_dataset) > args.max_eval_samples:
+        if args.max_eval_samples is not None and args.eval_dataset_size>0 and len(eval_dataset) > args.max_eval_samples:
             eval_dataset = eval_dataset.select(range(args.max_eval_samples))
-        if args.group_by_length:
+        if args.group_by_length and args.eval_dataset_size>0:
             eval_dataset = eval_dataset.map(lambda x: {'length': len(x['input']) + len(x['output'])})
+        if args.eval_dataset_size==0: 
+            eval_dataset=[0]
     if args.do_train:
         train_dataset = dataset['train']
         if args.max_train_samples is not None and len(train_dataset) > args.max_train_samples:
@@ -698,7 +704,7 @@ def train():
         **vars(model_args), **vars(data_args), **vars(training_args)
     )
     print(args)
-
+    
     checkpoint_dir, completed_training = get_last_checkpoint(args.output_dir)
     if completed_training:
         print('Detected that training was already completed!')
@@ -730,31 +736,33 @@ def train():
                 toks = trainer.tokenizer(['4235', '5462', '7132', '6460'], 
                         return_tensors="pt").input_ids #batch['input_ids']
                 
-                modelmu = model.merge_and_unload() #LlamaForCausalLM
+                # modelmu = model.merge_and_unload() #LlamaForCausalLM
                 
-                class nonBuggyNorm(torch.nn.Module): #replaces LlamaRMSNorm which has dtype issues
-                    def __init__(self, hidden_size, eps=1e-6):
-                        super().__init__()
-                        self.weight = torch.nn.Parameter(torch.ones(hidden_size))
-                        self.variance_epsilon = eps
+                # class nonBuggyNorm(torch.nn.Module): #replaces LlamaRMSNorm which has dtype issues
+                #     def __init__(self, hidden_size, eps=1e-6):
+                #         super().__init__()
+                #         self.weight = torch.nn.Parameter(torch.ones(hidden_size))
+                #         self.variance_epsilon = eps
                         
-                    def forward(self, hidden_states):
-                        input_dtype = hidden_states.dtype
-                        hidden_states = hidden_states.to(torch.float32)
-                        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-                        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-                        result = self.weight.to(hidden_states.get_device()) * hidden_states.to(input_dtype) # changed from LLamaRMSNorm
-                        return result.to(torch.bfloat16) # added from LLamaRMSNorm
+                #     def forward(self, hidden_states):
+                #         input_dtype = hidden_states.dtype
+                #         hidden_states = hidden_states.to(torch.float32)
+                #         variance = hidden_states.pow(2).mean(-1, keepdim=True)
+                #         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+                #         result = self.weight.to(hidden_states.get_device()) * hidden_states.to(input_dtype) # changed from LLamaRMSNorm
+                #         return result.to(torch.uint) # added from LLamaRMSNorm
                     
                     
-                modelmu.model.norm = nonBuggyNorm(modelmu.config.hidden_size, eps=modelmu.config.rms_norm_eps)
+                # model.model.norm = nonBuggyNorm(model.config.hidden_size, eps=model.config.rms_norm_eps)
                 
-                outputs = modelmu.generate(input_ids=toks.cuda(), max_new_tokens=100)
+                outputs = model.generate(input_ids=toks.cuda(), max_new_tokens=100)
                 predictions= trainer.tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False)
                 
-                with open(os.path.join(args.output_dir, 'samples.txt'), 'w+') as f:
-                    print('samples logged to ', os.path.join(args.output_dir, 'samples.txt'))
-                    f.writelines(predictions)
+                with open(os.path.join(args.output_dir, 'samples.txt'), 'a') as f:
+                    f.write(f'step {trainer.state.global_step}\n')
+                    f.write('\n'.join(predictions))
+                    f.write('\n\n')
+                print('samples logged to ', os.path.join(args.output_dir, 'samples.txt'))
                 
         trainer.add_callback(evalSampleCallback)
     if args.do_mmlu_eval:
