@@ -1,23 +1,23 @@
 python qlora.py \
-    --model_name_or_path huggyllama/llama-65b \
-    --output_dir ./output/guanaco-65b \
+    --model_name_or_path /mnt/data/zoo/llama2/llama2-7b-hf/ \
+    --use_auth \
     --logging_steps 10 \
     --save_strategy steps \
     --data_seed 42 \
-    --save_steps 200 \
+    --save_steps 5 \
     --save_total_limit 40 \
     --evaluation_strategy steps \
-    --eval_dataset_size 1024 \
-    --max_eval_samples 1000 \
+    --eval_dataset_size 1 \
+    --max_eval_samples 1 \
     --per_device_eval_batch_size 1 \
     --max_new_tokens 32 \
-    --dataloader_num_workers 3 \
+    --dataloader_num_workers 1 \
     --group_by_length \
     --logging_strategy steps \
     --remove_unused_columns False \
-    --do_train \
-    --do_eval \
-    --do_mmlu_eval \
+    --do_train True \
+    --eval_samples True \
+    --do_mmlu_eval False \
     --lora_r 64 \
     --lora_alpha 16 \
     --lora_modules all \
@@ -28,16 +28,15 @@ python qlora.py \
     --warmup_ratio 0.03 \
     --lr_scheduler_type constant \
     --gradient_checkpointing \
-    --dataset oasst1 \
+    --dataset /mnt/data/sonia/honeygan/llama_format_jul25.dat \
     --source_max_len 16 \
     --target_max_len 512 \
     --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 16 \
-    --max_steps 1875 \
-    --eval_steps 187 \
-    --learning_rate 0.0001 \
+    --max_steps 20 \
+    --eval_steps 1 \
     --adam_beta2 0.999 \
     --max_grad_norm 0.3 \
-    --lora_dropout 0.05 \
-    --weight_decay 0.0 \
-    --seed 0
+    --lora_dropout 0.1 \
+    --seed 0 \
+    
