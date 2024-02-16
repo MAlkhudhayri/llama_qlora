@@ -19,6 +19,8 @@ python qlora.py \
     --do_train True \
     --eval_samples True \
     --do_mmlu_eval False \
+    --diversity True \
+    --divdist manhattan \
     --lora_r 64 \
     --lora_alpha 16 \
     --lora_modules all \
@@ -29,7 +31,7 @@ python qlora.py \
     --warmup_ratio 0.03 \
     --lr_scheduler_type constant \
     --gradient_checkpointing \
-    --dataset /mnt/data/sonia/honeygan/llama_format_jul25.dat \
+    --dataset /mnt/data/sonia/honeygan/llama_format_feb13.dat \
     --source_max_len 16 \
     --target_max_len 512 \
     --per_device_train_batch_size 1 \
