@@ -131,7 +131,7 @@ class DataArguments:
     )
     dataset_format: Optional[str] = field(
         default=None,
-        metadata={"help": "Which dataset format is used. [alpaca|chip2|self-instruct|hh-rlhf]"}
+        metadata={"help": "Which dataset format is used. [alpaca|chip2|self-instruct|hh-rlhf|inout]"}
     )
 
 @dataclass
@@ -617,6 +617,11 @@ def make_data_module(tokenizer: transformers.PreTrainedTokenizer, args) -> Dict:
             return load_dataset("akoksal/LongForm")
         elif dataset_name == 'oasst1':
             return load_dataset("timdettmers/openassistant-guanaco")
+        elif dataset_name == 'wikide':
+            dataset = load_dataset('wikimedia/wikipedia', '20231101.de')
+            dataset = dataset.rename_column('title', 'input')
+            dataset = dataset.rename_column('text', 'output')
+            return dataset
         elif dataset_name == 'vicuna':
             raise NotImplementedError("Vicuna data was not released.")
         else:
@@ -654,7 +659,7 @@ def make_data_module(tokenizer: transformers.PreTrainedTokenizer, args) -> Dict:
                 'input': '',
                 'output': x['text'],
             })
-        elif dataset_format == 'input-output':
+        elif dataset_format == 'inout': #input and output columns
             # leave as is
             pass
         # Remove unused columns.
@@ -813,8 +818,8 @@ def train():
                 trainer.model.eval()
                 # batch = next(iter(trainer.get_train_dataloader()))
                 # print(batch['input_ids'].shape) #labels
-                toks = trainer.tokenizer(['4235', '5462', '7132', '6460'], 
-                        return_tensors="pt").input_ids #batch['input_ids']
+                toks = trainer.tokenizer(['Ampere ', 'Bushel ', 'Broom ', 'Computerspiel '], 
+                        return_tensors="pt", padding=True, truncation=True).input_ids #batch['input_ids']
                 
                 # modelmu = model.merge_and_unload() #LlamaForCausalLM
                 
