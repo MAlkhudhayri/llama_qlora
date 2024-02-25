@@ -818,7 +818,7 @@ def train():
                 trainer.model.eval()
                 # batch = next(iter(trainer.get_train_dataloader()))
                 # print(batch['input_ids'].shape) #labels
-                toks = trainer.tokenizer(['Ampere ', 'Bushel ', 'Broom ', 'Computerspiel '], 
+                toks = trainer.tokenizer(['52', '126', '5', '12'], 
                         return_tensors="pt", padding=True, truncation=True).input_ids #batch['input_ids']
                 
                 # modelmu = model.merge_and_unload() #LlamaForCausalLM
