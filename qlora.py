@@ -624,16 +624,11 @@ def make_data_module(tokenizer: transformers.PreTrainedTokenizer, args) -> Dict:
             return dataset
         elif dataset_name == 'vicuna':
             raise NotImplementedError("Vicuna data was not released.")
+        elif os.path.exists(dataset_name):
+            args.dataset_format = args.dataset_format if args.dataset_format else "inout"
+            return local_dataset(dataset_name)
         else:
-            if os.path.exists(dataset_name):
-                try:
-                    args.dataset_format = args.dataset_format if args.dataset_format else "input-output"
-                    full_dataset = local_dataset(dataset_name)
-                    return full_dataset
-                except:
-                    raise ValueError(f"Error loading dataset from {dataset_name}")
-            else:
-                raise NotImplementedError(f"Dataset {dataset_name} not implemented yet.")
+            raise NotImplementedError(f"Dataset {dataset_name} not implemented yet.")
 
     def format_dataset(dataset, dataset_format):
         if (
