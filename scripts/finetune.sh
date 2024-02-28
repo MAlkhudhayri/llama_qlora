@@ -1,7 +1,7 @@
 python qlora.py \
     --model_name_or_path /mnt/data/zoo/llama2/llama2-7b-hf/ \
     --use_auth \
-    --output_dir /mnt/data/sonia/ckpts/debug \
+    --output_dir /mnt/data/sonia/ckpts/sent1 \
     --logging_steps 10 \
     --save_strategy steps \
     --data_seed 42 \
@@ -11,7 +11,7 @@ python qlora.py \
     --eval_dataset_size 1 \
     --max_eval_samples 1 \
     --per_device_eval_batch_size 1 \
-    --max_new_tokens 32 \
+    --max_new_tokens 190 \
     --dataloader_num_workers 1 \
     --group_by_length \
     --logging_strategy steps \
@@ -19,7 +19,7 @@ python qlora.py \
     --do_train True \
     --eval_samples True \
     --do_mmlu_eval False \
-    --diversity True \
+    --diversity False \
     --divdist manhattan \
     --lora_r 64 \
     --lora_alpha 16 \
@@ -31,12 +31,12 @@ python qlora.py \
     --warmup_ratio 0.03 \
     --lr_scheduler_type constant \
     --gradient_checkpointing \
-    --dataset /mnt/data/sonia/honeygan/llama_format_feb13.dat \
+    --dataset /mnt/data/sonia/honeygan/llama_format_feb27.dat \
     --source_max_len 16 \
     --target_max_len 512 \
     --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 16 \
-    --max_steps 20 \
+    --max_steps 60 \
     --eval_steps 1 \
     --learning_rate 0.0002 \
     --adam_beta2 0.999 \

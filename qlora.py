@@ -816,25 +816,6 @@ def train():
                 toks = trainer.tokenizer(['52', '126', '5', '12'], 
                         return_tensors="pt", padding=True, truncation=True).input_ids #batch['input_ids']
                 
-                # modelmu = model.merge_and_unload() #LlamaForCausalLM
-                
-                # class nonBuggyNorm(torch.nn.Module): #replaces LlamaRMSNorm which has dtype issues
-                #     def __init__(self, hidden_size, eps=1e-6):
-                #         super().__init__()
-                #         self.weight = torch.nn.Parameter(torch.ones(hidden_size))
-                #         self.variance_epsilon = eps
-                        
-                #     def forward(self, hidden_states):
-                #         input_dtype = hidden_states.dtype
-                #         hidden_states = hidden_states.to(torch.float32)
-                #         variance = hidden_states.pow(2).mean(-1, keepdim=True)
-                #         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-                #         result = self.weight.to(hidden_states.get_device()) * hidden_states.to(input_dtype) # changed from LLamaRMSNorm
-                #         return result.to(torch.uint) # added from LLamaRMSNorm
-                    
-                    
-                # model.model.norm = nonBuggyNorm(model.config.hidden_size, eps=model.config.rms_norm_eps)
-                
                 outputs = model.generate(input_ids=toks.cuda(), max_new_tokens=100)
                 predictions= trainer.tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False)
                 
