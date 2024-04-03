@@ -1,7 +1,7 @@
 python qlora.py \
-    --model_name_or_path /mnt/data/zoo/llama2/llama2-7b-hf/ \
+    --model_name_or_path /hdd4/zoo/llama2/llama2-7b-hf \
     --use_auth \
-    --output_dir /mnt/data/sonia/ckpts/sent1 \
+    --output_dir /hdd3/mohammed/llama_qlora/ckpts/ \
     --logging_steps 10 \
     --save_strategy steps \
     --data_seed 42 \
@@ -31,7 +31,7 @@ python qlora.py \
     --warmup_ratio 0.03 \
     --lr_scheduler_type constant \
     --gradient_checkpointing \
-    --dataset /mnt/data/sonia/honeygan/llama_format_feb27.dat \
+    --dataset /hdd3/mohammed/llama_qlora/llama_format_feb27.dat \
     --source_max_len 16 \
     --target_max_len 512 \
     --per_device_train_batch_size 1 \

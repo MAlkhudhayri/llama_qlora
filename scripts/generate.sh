@@ -1,5 +1,5 @@
 python qlora.py \
-    --model_name_or_path EleutherAI/pythia-12b \
+    --model_name_or_path /hdd4/zoo/llama2/llama2-7b-hf \
     --output_dir ./output \
     --do_train False \
     --do_eval False \
